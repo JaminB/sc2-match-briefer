@@ -16,8 +16,28 @@ class RaceCode(Enum):
 
     @classmethod
     def from_alias(cls, alias: str) -> "RaceCode":
-        pass
+        if not alias:
+            raise ValueError("Empty race alias")
 
+        normalized = alias.strip().lower()
+
+        mapping = {
+            "terr": cls.TERRAN,
+            "terran": cls.TERRAN,
+            "prot": cls.PROTOSS,
+            "protoss": cls.PROTOSS,
+            "zerg": cls.ZERG,
+            "rand": cls.RANDOM,
+            "random": cls.RANDOM,
+        }
+
+        try:
+            return mapping[normalized]
+        except KeyError:
+            try:
+                return cls[alias.upper()]
+            except KeyError:
+                raise ValueError(f"Unknown race alias: {alias!r}")
 
 class TeamFormat(Enum):
     _1V1 = 201

@@ -2,13 +2,14 @@ import asyncio
 import httpx
 
 from sc_match_briefer.logger import logger
-from sc_match_briefer.models.player import print_player_summary
 from sc_match_briefer.models.player import Player
 from sc_match_briefer.models.config import Config
+from sc_match_briefer.analyze import PlayerAnalysis, Team2V2Analysis
+from sc_match_briefer.overlay_manager import close_all_overlays
+from sounds import two_tone_chime
 
 
-
-CONFIG_FILE = r"/Users/jamin.becker/PycharmProjects/sc2-match-briefer/config.yaml"
+CONFIG_FILE = r"C:\Users\jamin\PycharmProjects\sc2-match-briefer\config.yaml"
 URL = "http://localhost:6119/game"
 
 config = Config.from_config_file(CONFIG_FILE)
@@ -16,26 +17,121 @@ config = Config.from_config_file(CONFIG_FILE)
 
 async def poll_games():
     async with httpx.AsyncClient(timeout=5.0) as client:
+        previous_state = None
+
         while True:
             try:
                 r = await client.get(URL)
                 r.raise_for_status()
                 data = r.json()
-                players = data["players"]
-                if len(players) == 2:
-                    for player in players:
-                        player = Player(**player)
-                        if player.name == config.me.name:
-                            continue
-                        if player.name in config.team.members:
-                            continue
-                        logger.info(f"Looking up {player.name}.")
-                        player_stats = player.get_best_match(min_mmr=config.me.mmr - 500, max_mmr=config.me.mmr + 500)
-                        print_player_summary(player_name = player.name, player_stats = player_stats, history = player_stats.match_history)
+
+                players = data.get("players", [])
+                """
+                if any(p.get("result") in ["Victory", "Defeat"] for p in players):
+                    close_all_overlays()
+                    logger.info("Game concluded. Waiting for next lobby...")
+                    await asyncio.sleep(5)
+                    continue
+                """
+                if not players:
+                    await asyncio.sleep(5)
+                    continue
+
+                current_state = tuple(
+                    (i, p.get("name"), p.get("race"))
+                    for i, p in enumerate(players)
+                )
+
+                if current_state == previous_state:
+                    await asyncio.sleep(5)
+                    continue
+
+                logger.info(f"New game detected: {current_state}")
+                previous_state = current_state
+
+                # ---- SEPARATE TEAMS ----
+                my_name = config.me.name
+                my_team = []
+                opp_team = []
+
+                # Split into teams by your teammates configuration
+                for p in players:
+                    name = p.get("name")
+                    if name == my_name or name in config.team.members:
+                        my_team.append(p)
+                    else:
+                        opp_team.append(p)
+
+                if not opp_team:
+                    logger.info("No opponents found (FFA or error).")
+                    await asyncio.sleep(5)
+                    continue
+
+                if len(opp_team) == 1:
+                    opp = opp_team[0]
+                    logger.info(f"Looking up opponent {opp['name']} (1v1)…")
+
+                    player_obj = Player(**opp)
+                    stats = player_obj.get_best_match(
+                        min_mmr=config.me.mmr - 500,
+                        max_mmr=config.me.mmr + 500,
+                    )
+                    analysis = PlayerAnalysis.from_player_stats(
+                        stats, player=player_obj
+                    )
+
+                    two_tone_chime()
+                    analysis.show_overlay(duration_seconds=180)
+                    await asyncio.sleep(5)
+                    continue
+
+                if len(opp_team) > 2:
+                    opp_team = [opp_team[0], opp_team[1]]
+
+                # ---- 2v2 MODE ----
+                if len(opp_team) == 2:
+                    logger.info(f"Detected 2v2. Opponents: {[p['name'] for p in opp_team]}")
+
+                    p1_raw, p2_raw = opp_team
+
+                    # Get stats for both opponents
+                    opp1 = Player(**p1_raw)
+                    opp2 = Player(**p2_raw)
+
+                    ps1 = PlayerAnalysis.from_player_stats(
+                        opp1.get_best_match(
+                            min_mmr=config.me.mmr - 500,
+                            max_mmr=config.me.mmr + 500,
+                        ),
+                        player=opp1
+                    )
+
+                    ps2 = PlayerAnalysis.from_player_stats(
+                        opp2.get_best_match(
+                            min_mmr=config.me.mmr - 500,
+                            max_mmr=config.me.mmr + 500,
+                        ),
+                        player=opp2
+                    )
+
+                    # Team HUD
+                    team_hud = Team2V2Analysis(ps1, ps2)
+                    two_tone_chime()
+                    team_hud.show_overlay(duration_seconds=180)
+
+                    await asyncio.sleep(5)
+                    continue
+
+                # ---- Unsupported modes (3v3, 4v4, FFA) ----
+                logger.info(f"Unsupported team size: {len(opp_team)} players on enemy team.")
+                await asyncio.sleep(5)
+
             except Exception as e:
-                print("Error:", e)
+                logger.error(f"Error while polling: {e}")
 
             await asyncio.sleep(5)
+
+
 
 if __name__ == "__main__":
     asyncio.run(poll_games())
