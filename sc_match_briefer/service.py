@@ -1,13 +1,13 @@
 import asyncio
-import httpx
 
-from sc_match_briefer.logger import logger
-from sc_match_briefer.models.player import Player
-from sc_match_briefer.models.config import Config
-from sc_match_briefer.analyze import PlayerAnalysis, Team2V2Analysis
-from sc_match_briefer.overlay_manager import close_all_overlays
+import httpx
 from sounds import two_tone_chime
 
+from sc_match_briefer.analyze import PlayerAnalysis, Team2V2Analysis
+from sc_match_briefer.logger import logger
+from sc_match_briefer.models.config import Config
+from sc_match_briefer.models.player import Player
+from sc_match_briefer.overlay_manager import close_all_overlays
 
 CONFIG_FILE = r"C:\Users\jamin\PycharmProjects\sc2-match-briefer\config.yaml"
 URL = "http://localhost:6119/game"
@@ -38,8 +38,7 @@ async def poll_games():
                     continue
 
                 current_state = tuple(
-                    (i, p.get("name"), p.get("race"))
-                    for i, p in enumerate(players)
+                    (i, p.get("name"), p.get("race")) for i, p in enumerate(players)
                 )
 
                 if current_state == previous_state:
@@ -90,7 +89,9 @@ async def poll_games():
 
                 # ---- 2v2 MODE ----
                 if len(opp_team) == 2:
-                    logger.info(f"Detected 2v2. Opponents: {[p['name'] for p in opp_team]}")
+                    logger.info(
+                        f"Detected 2v2. Opponents: {[p['name'] for p in opp_team]}"
+                    )
 
                     p1_raw, p2_raw = opp_team
 
@@ -103,7 +104,7 @@ async def poll_games():
                             min_mmr=config.me.mmr - 500,
                             max_mmr=config.me.mmr + 500,
                         ),
-                        player=opp1
+                        player=opp1,
                     )
 
                     ps2 = PlayerAnalysis.from_player_stats(
@@ -111,7 +112,7 @@ async def poll_games():
                             min_mmr=config.me.mmr - 500,
                             max_mmr=config.me.mmr + 500,
                         ),
-                        player=opp2
+                        player=opp2,
                     )
 
                     # Team HUD
@@ -123,14 +124,15 @@ async def poll_games():
                     continue
 
                 # ---- Unsupported modes (3v3, 4v4, FFA) ----
-                logger.info(f"Unsupported team size: {len(opp_team)} players on enemy team.")
+                logger.info(
+                    f"Unsupported team size: {len(opp_team)} players on enemy team."
+                )
                 await asyncio.sleep(5)
 
             except Exception as e:
                 logger.error(f"Error while polling: {e}")
 
             await asyncio.sleep(5)
-
 
 
 if __name__ == "__main__":

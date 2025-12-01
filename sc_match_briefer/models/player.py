@@ -1,15 +1,15 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Set
-from pydantic import BaseModel
-import httpx
+from typing import Dict, List, Optional, Set
 
-from sc_match_briefer.enums import League
+import httpx
+from pydantic import BaseModel
+
+from sc_match_briefer.enums import League, Region, TeamFormat, TeamType
 from sc_match_briefer.logger import logger
-from sc_match_briefer.models.shared import PreviousStats, CurrentStats
 from sc_match_briefer.models.character import Character
-from sc_match_briefer.enums import Region, TeamFormat, TeamType
+from sc_match_briefer.models.shared import CurrentStats, PreviousStats
+from sc_match_briefer.models.team_history import TeamHistory, TeamHistoryPoint
 from sc_match_briefer.utils import create_team_legacy_uid
-from sc_match_briefer.models.team_history import TeamHistoryPoint, TeamHistory
 
 
 class Members(BaseModel):
@@ -102,7 +102,6 @@ class PlayerStats(BaseModel):
         self._match_history_cache = history
         return history
 
-
     def legacy_uid(
         self,
         queue_type: TeamFormat,
@@ -116,6 +115,7 @@ class PlayerStats(BaseModel):
             region=region_enum,
             members=[self.members],
         )
+
 
 class Player(BaseModel):
     id: int
@@ -138,9 +138,12 @@ class Player(BaseModel):
         candidates = self.matches()
 
         filtered = [
-            c for c in candidates
-            if (c.currentStats.rating is not None
-                and min_mmr <= c.currentStats.rating <= max_mmr)
+            c
+            for c in candidates
+            if (
+                c.currentStats.rating is not None
+                and min_mmr <= c.currentStats.rating <= max_mmr
+            )
         ]
 
         if not filtered:
@@ -154,7 +157,9 @@ class Player(BaseModel):
         newest = datetime.min
 
         for match in filtered:
-            logger.info(f"Evaluating {self.name} candidate with MMR={match.currentStats.rating}")
+            logger.info(
+                f"Evaluating {self.name} candidate with MMR={match.currentStats.rating}"
+            )
 
             for team in match.members.character.teams:
                 if not team.lastPlayed:

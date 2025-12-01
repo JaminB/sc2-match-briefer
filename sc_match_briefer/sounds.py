@@ -1,8 +1,8 @@
 import math
-import wave
 import struct
-import winsound
 import tempfile
+import wave
+import winsound
 from pathlib import Path
 
 
@@ -16,9 +16,9 @@ def write_tone(wav: wave.Wave_write, freq: float, duration: float, volume: float
 
         fade_samples = int(num_samples * 0.05)
         if i < fade_samples:
-            sample *= (i / fade_samples)
+            sample *= i / fade_samples
         elif i > num_samples - fade_samples:
-            sample *= ((num_samples - i) / fade_samples)
+            sample *= (num_samples - i) / fade_samples
 
         sample = int(sample * volume * 32767)
         wav.writeframes(struct.pack("<h", sample))
@@ -32,8 +32,8 @@ def two_tone_chime():
         wav_path.unlink()
 
     # Two pleasant tones
-    tone1 = 660.0   # soft chime A#
-    tone2 = 880.0   # harmonic pleasant overtone
+    tone1 = 660.0  # soft chime A#
+    tone2 = 880.0  # harmonic pleasant overtone
 
     duration1 = 0.20
     duration2 = 0.20

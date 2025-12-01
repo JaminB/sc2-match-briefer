@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from typing import Optional
 
-import sys
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QHBoxLayout
-
 from pydantic import BaseModel
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from sc_match_briefer.models.player import Player, PlayerStats
 from sc_match_briefer.enums import League, RaceCode
-from sc_match_briefer.overlay_manager import register_overlay, close_all_overlays
+from sc_match_briefer.models.player import Player, PlayerStats
+from sc_match_briefer.overlay_manager import close_all_overlays, register_overlay
 
 
 class PlayerAnalysis(BaseModel):
@@ -21,7 +20,15 @@ class PlayerAnalysis(BaseModel):
     @classmethod
     def from_player_name(cls, str_player_name: str) -> PlayerAnalysis:
         str_player_name = str_player_name.strip()
-        return cls.from_player(Player(id=1, name=str_player_name, type="user", result="Undecided", race="Unknown"))
+        return cls.from_player(
+            Player(
+                id=1,
+                name=str_player_name,
+                type="user",
+                result="Undecided",
+                race="Unknown",
+            )
+        )
 
     @classmethod
     def from_player(cls, player: Player) -> "PlayerAnalysis":
@@ -30,7 +37,9 @@ class PlayerAnalysis(BaseModel):
         return cls(player_stats=stats)
 
     @classmethod
-    def from_player_stats(cls, player_stats: PlayerStats, player: Optional[Player] = None) -> "PlayerAnalysis":
+    def from_player_stats(
+        cls, player_stats: PlayerStats, player: Optional[Player] = None
+    ) -> "PlayerAnalysis":
         current_race = "Unknown"
         if player.race is not None:
             current_race = RaceCode.from_alias(player.race).name
@@ -47,8 +56,8 @@ class PlayerAnalysis(BaseModel):
     @property
     def current_mmr(self) -> Optional[int]:
         return (
-                self.player_stats.currentStats.rating
-                or self.player_stats.previousStats.rating
+            self.player_stats.currentStats.rating
+            or self.player_stats.previousStats.rating
         )
 
     @property
@@ -213,9 +222,7 @@ class PlayerAnalysis(BaseModel):
                 n = member.character.name
                 if n == my_name:
                     continue
-                entry = result.setdefault(
-                    n, {"count": 0, "last_played": None}
-                )
+                entry = result.setdefault(n, {"count": 0, "last_played": None})
                 entry["count"] += 1
                 if entry["last_played"] is None or ts > entry["last_played"]:
                     entry["last_played"] = ts
@@ -274,7 +281,7 @@ class PlayerAnalysis(BaseModel):
             "falling": "▼",
             "strong falling": "▼▼",
             "flat": "→",
-            "unknown": "?"
+            "unknown": "?",
         }.get(self.mmr_trend, "")
 
         primary_race = summary["Most Played Race"]
@@ -296,18 +303,20 @@ class PlayerAnalysis(BaseModel):
         if smurf_note:
             lines.append(f"Smurf Check: {smurf_note}")
 
-        lines.extend([
-            f"Last Played: {summary['Last Played']}",
-            "",
-            "Performance:",
-            f" 1d   W:{summary['Wins (1d)']}  L:{summary['Losses (1d)']}",
-            f" 3d   W:{summary['Wins (3d)']}  L:{summary['Losses (3d)']}",
-            f" 7d   W:{summary['Wins (7d)']}  L:{summary['Losses (7d)']}",
-            f"30d   W:{summary['Wins (30d)']} L:{summary['Losses (30d)']}",
-            f"LFT   W:{summary['Lifetime Wins']} L:{summary['Lifetime Losses']}",
-            "",
-            "Recent Teammates:",
-        ])
+        lines.extend(
+            [
+                f"Last Played: {summary['Last Played']}",
+                "",
+                "Performance:",
+                f" 1d   W:{summary['Wins (1d)']}  L:{summary['Losses (1d)']}",
+                f" 3d   W:{summary['Wins (3d)']}  L:{summary['Losses (3d)']}",
+                f" 7d   W:{summary['Wins (7d)']}  L:{summary['Losses (7d)']}",
+                f"30d   W:{summary['Wins (30d)']} L:{summary['Losses (30d)']}",
+                f"LFT   W:{summary['Lifetime Wins']} L:{summary['Lifetime Losses']}",
+                "",
+                "Recent Teammates:",
+            ]
+        )
 
         teammate_rows = []
         for name, info in self.teammates.items():
@@ -337,7 +346,8 @@ class PlayerAnalysis(BaseModel):
         layout = QVBoxLayout()
         label = QLabel(text)
 
-        label.setStyleSheet("""
+        label.setStyleSheet(
+            """
             color: #FFFFFF;
             background-color: rgba(10, 10, 10, 220);
             padding: 16px 22px;
@@ -347,7 +357,8 @@ class PlayerAnalysis(BaseModel):
             font-weight: 500;
             line-height: 155%;
             text-shadow: 0 0 6px rgba(0,0,0,0.85);
-        """)
+        """
+        )
 
         layout.addWidget(label)
         overlay.setLayout(layout)
@@ -362,6 +373,7 @@ class PlayerAnalysis(BaseModel):
 
         if created:
             app.exec()
+
 
 class Team2v2Analysis(BaseModel):
     p1: PlayerAnalysis
@@ -391,8 +403,13 @@ class Team2v2Analysis(BaseModel):
         leagues = [self.p1.max_league, self.p2.max_league]
         # approximate league strength ordering
         order = [
-            "BRONZE", "SILVER", "GOLD", "PLATINUM",
-            "DIAMOND", "MASTER", "GRANDMASTER"
+            "BRONZE",
+            "SILVER",
+            "GOLD",
+            "PLATINUM",
+            "DIAMOND",
+            "MASTER",
+            "GRANDMASTER",
         ]
         ranked = sorted(leagues, key=lambda L: order.index(L))
         return ranked[-1]
@@ -454,7 +471,6 @@ class Team2v2Analysis(BaseModel):
         print("======================\n")
 
 
-
 class Team2V2Analysis:
     def __init__(self, p1: PlayerAnalysis, p2: PlayerAnalysis):
         self.p1 = p1
@@ -508,15 +524,17 @@ class Team2V2Analysis:
         if smurf_note:
             block.append(f"⚠ {smurf_note}")
 
-        block.extend([
-            "",
-            "Perf:",
-            f"1d  {s['Wins (1d)']}W/{s['Losses (1d)']}L",
-            f"3d  {s['Wins (3d)']}W/{s['Losses (3d)']}L",
-            f"7d  {s['Wins (7d)']}W/{s['Losses (7d)']}L",
-            f"30d {s['Wins (30d)']}W/{s['Losses (30d)']}L",
-            f"LFT {s['Lifetime Wins']}W/{s['Lifetime Losses']}L",
-        ])
+        block.extend(
+            [
+                "",
+                "Perf:",
+                f"1d  {s['Wins (1d)']}W/{s['Losses (1d)']}L",
+                f"3d  {s['Wins (3d)']}W/{s['Losses (3d)']}L",
+                f"7d  {s['Wins (7d)']}W/{s['Losses (7d)']}L",
+                f"30d {s['Wins (30d)']}W/{s['Losses (30d)']}L",
+                f"LFT {s['Lifetime Wins']}W/{s['Lifetime Losses']}L",
+            ]
+        )
 
         return "\n".join(block)
 
@@ -547,10 +565,10 @@ class Team2V2Analysis:
         overlay = QWidget()
         register_overlay(overlay)
         overlay.setWindowFlags(
-            Qt.FramelessWindowHint |
-            Qt.WindowStaysOnTopHint |
-            Qt.Tool |
-            Qt.WindowTransparentForInput
+            Qt.FramelessWindowHint
+            | Qt.WindowStaysOnTopHint
+            | Qt.Tool
+            | Qt.WindowTransparentForInput
         )
         overlay.setAttribute(Qt.WA_TranslucentBackground)
         overlay.setAttribute(Qt.WA_ShowWithoutActivating)
@@ -588,7 +606,7 @@ class Team2V2Analysis:
         overlay.adjustSize()
         overlay.move(
             screen.width() - overlay.width() - 40,  # right-aligned
-            40  # slight top margin
+            40,  # slight top margin
         )
 
         overlay.show()
@@ -597,4 +615,3 @@ class Team2V2Analysis:
 
         if created:
             app.exec()
-

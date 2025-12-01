@@ -39,6 +39,7 @@ class RaceCode(Enum):
             except KeyError:
                 raise ValueError(f"Unknown race alias: {alias!r}")
 
+
 class TeamFormat(Enum):
     _1V1 = 201
     _2V2 = 202

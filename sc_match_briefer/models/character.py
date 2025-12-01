@@ -1,12 +1,6 @@
-import httpx
-from typing import Optional, List, Dict
-from pydantic import BaseModel
-
-from sc_match_briefer.models.team import Team
-
+from typing import Dict, List, Optional
 
 import httpx
-from typing import Optional, List
 from pydantic import BaseModel, PrivateAttr
 
 from sc_match_briefer.models.team import Team
@@ -39,4 +33,3 @@ class Character(BaseModel):
         teams = [Team.model_validate(entry) for entry in data]
         self._team_cache = teams
         return teams
-

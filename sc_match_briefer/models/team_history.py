@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict
-from pydantic import BaseModel, field_validator, computed_field
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel, computed_field, field_validator
 
 
 class TeamHistoryPoint(BaseModel):
@@ -36,7 +38,8 @@ class TeamHistoryData(BaseModel):
 
 
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import Dict, List
+
 from pydantic import BaseModel, computed_field
 
 
@@ -49,8 +52,7 @@ class TeamHistory(BaseModel):
     @property
     def mmr_deltas(self) -> List[int]:
         return [
-            self.ratings[i] - self.ratings[i - 1]
-            for i in range(1, len(self.ratings))
+            self.ratings[i] - self.ratings[i - 1] for i in range(1, len(self.ratings))
         ]
 
     def _count_recent(self, days: int) -> Dict[str, int]:
@@ -117,4 +119,3 @@ class TeamHistory(BaseModel):
     @property
     def losses_lifetime(self) -> int:
         return self._count_recent(-1)["losses"]
-
