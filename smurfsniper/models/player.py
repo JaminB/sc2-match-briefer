@@ -55,7 +55,6 @@ class PlayerStats(BaseModel):
         if not urls:
             return None
 
-        # limit to first 10 UIDs (API constraint/subtle rate protection)
         url = (
             "https://sc2pulse.nephest.com/sc2/api/team-histories?"
             + "&".join(list(urls)[:10])
@@ -145,7 +144,7 @@ class Player(BaseModel):
 
         return [PlayerStats.model_validate(entry) for entry in data]
 
-    def get_best_match(self, min_mmr: int = 0, max_mmr: int = 5000) -> PlayerStats:
+    def get_player_stats(self, min_mmr: int = 0, max_mmr: int = 5000) -> PlayerStats:
         candidates = self.matches()
 
         filtered = [

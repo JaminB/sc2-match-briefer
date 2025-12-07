@@ -4,7 +4,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 from sounds import one_tone_chime, two_tone_chime
 
-from smurfsniper.analyze import PlayerAnalysis, Team2V2Analysis
+from smurfsniper.analyze.players import Player2v2Analysis, PlayerAnalysis
 from smurfsniper.enums import TeamFormat
 from smurfsniper.logger import logger
 from smurfsniper.models.config import Config
@@ -74,13 +74,13 @@ class GamePoller:
             opp2 = Player(**p2_raw)
 
             ps1 = PlayerAnalysis.from_player_stats(
-                opp1.get_best_match(
+                opp1.get_player_stats(
                     min_mmr=self.config.me.mmr - 500, max_mmr=self.config.me.mmr + 500
                 ),
                 player=opp1,
             )
             ps2 = PlayerAnalysis.from_player_stats(
-                opp2.get_best_match(
+                opp2.get_player_stats(
                     min_mmr=self.config.me.mmr - 500, max_mmr=self.config.me.mmr + 500
                 ),
                 player=opp2,
@@ -89,7 +89,7 @@ class GamePoller:
             logger.info(f"Detected 2v2 opponents: {opp1.name}, {opp2.name}")
             two_tone_chime()
 
-            hud = Team2V2Analysis(ps1, ps2)
+            hud = Player2v2Analysis(ps1, ps2)
             self.team_2v2_analysis = hud
             hud.show_overlay(
                 duration_seconds=self.config.preferences.overlay_2v2.seconds_visible
@@ -100,7 +100,7 @@ class GamePoller:
         opp_raw = opp_team[0]
         opp_obj = Player(**opp_raw)
 
-        stats = opp_obj.get_best_match(
+        stats = opp_obj.get_player_stats(
             min_mmr=self.config.me.mmr - 500,
             max_mmr=self.config.me.mmr + 500,
         )

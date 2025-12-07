@@ -1,6 +1,9 @@
 from typing import Dict, List, Optional
 
+import httpx
 from pydantic import BaseModel
+
+from smurfsniper.models.team_history import TeamHistory, TeamHistoryPoint
 
 
 class TeamLeague(BaseModel):
@@ -53,6 +56,34 @@ class TeamMember(BaseModel):
 
     raceGames: Dict[str, int]
 
+    @classmethod
+    def merge(cls, members: list["TeamMember"]) -> "TeamMember":
+        if not members:
+            raise ValueError("No TeamMember objects provided for merge")
+
+        first_member = members[0]
+
+        protoss = sum(m.protossGamesPlayed or 0 for m in members)
+        terran = sum(m.terranGamesPlayed or 0 for m in members)
+        zerg = sum(m.zergGamesPlayed or 0 for m in members)
+        random_games = sum(m.randomGamesPlayed or 0 for m in members)
+
+        merged_race_games: dict[str, int] = {}
+        for m in members:
+            for race, value in m.raceGames.items():
+                merged_race_games[race] = merged_race_games.get(race, 0) + value
+
+        return cls(
+            protossGamesPlayed=protoss,
+            terranGamesPlayed=terran,
+            zergGamesPlayed=zerg,
+            randomGamesPlayed=random_games,
+            raceGames=merged_race_games,
+            character=first_member.character,
+            account=first_member.account,
+            clan=first_member.clan,
+        )
+
 
 class Team(BaseModel):
     rating: int
@@ -87,3 +118,114 @@ class Team(BaseModel):
     leagueType: int
 
     legacyUid: str
+
+    _match_history_cache: Optional[TeamHistory] = None
+
+    @classmethod
+    def merge(cls, teams: List["Team"]) -> "Team":
+        if not teams:
+            raise ValueError("No teams provided for merge")
+
+        most_recent = max(
+            teams, key=lambda t: t.lastPlayed or t.primaryDataUpdated or t.joined or ""
+        )
+
+        first_joined = min(
+            [team for team in teams if team.joined], key=lambda t: t.joined
+        ).joined
+
+        total_wins = sum(t.wins for t in teams)
+        total_losses = sum(t.losses for t in teams)
+        total_ties = sum(t.ties for t in teams)
+
+        members_by_id: dict[int, list[TeamMember]] = {}
+
+        for team in teams:
+            for member in team.members:
+                bid = member.character.battlenetId
+                members_by_id.setdefault(bid, []).append(member)
+
+        merged_members = [
+            TeamMember.merge(member_group) for member_group in members_by_id.values()
+        ]
+
+        return cls(
+            wins=total_wins,
+            losses=total_losses,
+            ties=total_ties,
+            rating=most_recent.rating,
+            id=most_recent.id,
+            legacyId=most_recent.legacyId,
+            divisionId=most_recent.divisionId,
+            season=most_recent.season,
+            region=most_recent.region,
+            league=most_recent.league,
+            globalRank=most_recent.globalRank,
+            regionRank=most_recent.regionRank,
+            leagueRank=most_recent.leagueRank,
+            lastPlayed=most_recent.lastPlayed,
+            joined=first_joined,
+            primaryDataUpdated=most_recent.primaryDataUpdated,
+            members=merged_members,
+            globalTeamCount=most_recent.globalTeamCount,
+            regionTeamCount=most_recent.regionTeamCount,
+            leagueTeamCount=most_recent.leagueTeamCount,
+            queueType=most_recent.queueType,
+            teamType=most_recent.teamType,
+            leagueType=most_recent.leagueType,
+            legacyUid=most_recent.legacyUid,
+        )
+
+    @property
+    def match_history(self) -> Optional[TeamHistory]:
+
+        if self._match_history_cache is not None:
+            return self._match_history_cache
+
+        if not self.legacyUid:
+            return None
+
+        url = (
+            "https://sc2pulse.nephest.com/sc2/api/team-histories?"
+            f"teamLegacyUid={self.legacyUid}"
+            "&groupBy=LEGACY_UID"
+            "&static=LEGACY_ID"
+            "&history=TIMESTAMP"
+            "&history=RATING"
+        )
+
+        with httpx.Client(timeout=10.0) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            data = r.json()
+
+        merged_points: List[TeamHistoryPoint] = []
+
+        for entry in data:
+            history = entry.get("history", {})
+            timestamps = history.get("TIMESTAMP", [])
+            ratings = history.get("RATING", [])
+
+            for ts, rating in zip(timestamps, ratings):
+                merged_points.append(TeamHistoryPoint.from_raw(ts, rating))
+
+        if not merged_points:
+            return None
+
+        merged_points.sort(key=lambda p: p.timestamp)
+
+        deduped: List[TeamHistoryPoint] = []
+        last_ts = None
+        for p in merged_points:
+            if p.timestamp != last_ts:
+                deduped.append(p)
+                last_ts = p.timestamp
+
+        history = TeamHistory(
+            legacy_uid=self.legacyUid,
+            timestamps=[p.timestamp for p in deduped],
+            ratings=[p.rating for p in deduped],
+        )
+
+        self._match_history_cache = history
+        return history

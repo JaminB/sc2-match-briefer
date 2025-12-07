@@ -146,12 +146,10 @@ class TeamHistory(BaseModel):
         if len(points) < 3:
             return "(insufficient data)"
 
-        # Normalize to 0-1 scale
         mn, mx = min(points), max(points)
         span = max(mx - mn, 1)
         normalized = [(p - mn) / span for p in points]
 
-        # Unicode bar levels (low → high)
         bars = "▁▂▃▄▅▆▇█"
         n_levels = len(bars)
 
