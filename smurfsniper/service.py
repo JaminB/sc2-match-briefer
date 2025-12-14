@@ -1,9 +1,13 @@
+import signal
+import sys
+
 import keyboard
 import requests
+
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
-from sounds import one_tone_chime, two_tone_chime
 
+from smurfsniper.sounds import one_tone_chime, two_tone_chime
 from smurfsniper.analyze.player_logs import PlayerLogAnalysis
 from smurfsniper.analyze.players import Player2v2Analysis, PlayerAnalysis
 from smurfsniper.analyze.teams import NoTeamFound, TeamAnalysis
@@ -14,13 +18,13 @@ from smurfsniper.models.player import Player
 from smurfsniper.models.player_log import PlayerLog, init_player_log_db
 from smurfsniper.ui.overlay_manager import close_all_overlays
 
+
 POSTGAME_POSITIONS = [
     "top_left",
     "top_right",
     "bottom_left",
     "bottom_right",
 ]
-
 
 class GamePoller:
     def __init__(self, url: str, config_path: str):
@@ -32,8 +36,6 @@ class GamePoller:
         self.player_analysis = None
         self.player_2v2_analysis = None
         self.team_analysis = None
-
-    # ---------------- Public API ----------------
 
     def poll_once(self):
         data = self._fetch_game_state()
@@ -75,8 +77,7 @@ class GamePoller:
             return None
 
     def _is_game_end(self, players) -> bool:
-        results = {"Victory", "Defeat", "Tie"}
-        return any(p.get("result") in results for p in players)
+        return any(p.get("result") in {"Victory", "Defeat", "Tie"} for p in players)
 
     def _is_new_game(self, players) -> bool:
         state = tuple((p.get("name"), p.get("race")) for p in players)
@@ -101,7 +102,11 @@ class GamePoller:
                 continue
 
             player = Player(**p)
-            stats = player.get_player_stats(mmr_min, mmr_max)
+            try:
+                stats = player.get_player_stats(mmr_min, mmr_max)
+            except IndexError:
+                logger.warning("Could not find any records for one or more opponents.")
+                return
 
             most_recent = PlayerLog.most_recent()
             log = PlayerLog.from_player_stats(
@@ -117,14 +122,10 @@ class GamePoller:
                 log.save()
 
     def _split_teams(self, players):
-        my_team = []
-        opp_team = []
+        my_team, opp_team = [], []
 
         for p in players:
-            if (
-                p.get("name") == self.config.me
-                or p.get("name") in self.config.team.members
-            ):
+            if p.get("name") == self.config.me or p.get("name") in self.config.team.members:
                 my_team.append(p)
             else:
                 opp_team.append(p)
@@ -144,10 +145,7 @@ class GamePoller:
             stats, opp, self.config.preferences.overlay_player_log_1
         )
 
-        self.player_analysis = PlayerAnalysis.from_player_stats(
-            stats,
-            player=opp,
-        )
+        self.player_analysis = PlayerAnalysis.from_player_stats(stats, player=opp)
 
         logger.info(f"Detected 1v1 opponent: {opp.name}")
         two_tone_chime()
@@ -179,29 +177,33 @@ class GamePoller:
     def _handle_2v2(self, opp_team):
         self.mode = TeamFormat._2V2
 
-        opp1 = Player(**opp_team[0])
-        opp2 = Player(**opp_team[1])
+        opp1, opp2 = Player(**opp_team[0]), Player(**opp_team[1])
 
-        opp1_stats = opp1.get_player_stats(
-            self.config.me.mmr - 500, self.config.me.mmr + 500
-        )
-        opp2_stats = opp2.get_player_stats(
-            self.config.me.mmr - 500, self.config.me.mmr + 500
-        )
+        try:
+            opp1_stats = opp1.get_player_stats(
+                self.config.me.mmr - 500, self.config.me.mmr + 500
+            )
+            opp2_stats = opp2.get_player_stats(
+                self.config.me.mmr - 500, self.config.me.mmr + 500
+            )
+        except IndexError:
+            logger.warning("Could not find any records for one or more opponents.")
+            return
 
         ps1 = PlayerAnalysis.from_player_stats(opp1_stats, player=opp1)
         ps2 = PlayerAnalysis.from_player_stats(opp2_stats, player=opp2)
 
         logger.info(f"Detected 2v2 opponents: {opp1.name}, {opp2.name}")
         two_tone_chime()
+
         self._show_opponent_history(
             opp1_stats, opp1, self.config.preferences.overlay_player_log_1
         )
         self._show_opponent_history(
             opp2_stats, opp2, self.config.preferences.overlay_player_log_2
         )
-        self.player_2v2_analysis = Player2v2Analysis(ps1, ps2)
 
+        self.player_2v2_analysis = Player2v2Analysis(ps1, ps2)
         self.player_2v2_analysis.show_overlay(
             duration_seconds=self.config.preferences.overlay_2v2.seconds_visible,
             orientation=self.config.preferences.overlay_2v2.orientation,
@@ -225,13 +227,17 @@ class GamePoller:
     def _handle_team_game(self, opp_team):
         self.mode = TeamFormat._3V3 if len(opp_team) == 3 else TeamFormat._4V4
 
-        opp_stats = [
-            Player(**p).get_player_stats(
-                min_mmr=self.config.me.mmr - 500,
-                max_mmr=self.config.me.mmr,
-            )
-            for p in opp_team
-        ]
+        try:
+            opp_stats = [
+                Player(**p).get_player_stats(
+                    min_mmr=self.config.me.mmr - 500,
+                    max_mmr=self.config.me.mmr,
+                )
+                for p in opp_team
+            ]
+        except IndexError:
+            logger.warning("Could not find any records for one or more opponents.")
+            return
 
         try:
             self.team_analysis = TeamAnalysis.from_players_stats(player_stats=opp_stats)
@@ -245,14 +251,10 @@ class GamePoller:
             logger.warning(f"No team found for {opp_stats}")
 
 
-CONFIG_FILE = r"C:\Users\jamin\PycharmProjects\smurfsniper\config.yaml"
-URL = "http://localhost:6119/game"
-
-
-if __name__ == "__main__":
+def main(url:str, config_file_path: str):
     app = QApplication([])
-
-    poller = GamePoller(URL, CONFIG_FILE)
+    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    poller = GamePoller(url, config_file_path)
 
     def on_ctrl_f1():
         one_tone_chime()
@@ -264,4 +266,7 @@ if __name__ == "__main__":
     timer.timeout.connect(poller.poll_once)
     timer.start(5000)
 
-    app.exec()
+    exit_code = app.exec()
+
+    keyboard.unhook_all()
+    sys.exit(exit_code)
